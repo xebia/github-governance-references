@@ -36,6 +36,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$startTime = Get-Date
 
 # ─── Prerequisites ────────────────────────────────────────────────────────────
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -72,3 +73,14 @@ if ($OutputFile) {
     Write-Host "Repo list saved to: $OutputFile" -ForegroundColor Cyan
     Write-Host "Pass it to Find-CopilotCustomizations.ps1 with -RepoListFile '$OutputFile'" -ForegroundColor DarkCyan
 }
+
+# ─── Duration ─────────────────────────────────────────────────────────────────
+$duration = New-TimeSpan -Start $startTime -End (Get-Date)
+$durationStr = if ($duration.TotalHours -ge 1) {
+    '{0}h {1}m {2}s' -f [int]$duration.TotalHours, $duration.Minutes, $duration.Seconds
+} elseif ($duration.TotalMinutes -ge 1) {
+    '{0}m {1}s' -f $duration.Minutes, $duration.Seconds
+} else {
+    '{0}s' -f $duration.Seconds
+}
+Write-Host "  Completed in $durationStr" -ForegroundColor DarkGray

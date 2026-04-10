@@ -59,6 +59,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$startTime = Get-Date
 
 # ─── Prerequisites ────────────────────────────────────────────────────────────
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -167,10 +168,17 @@ $SEP  = '─' * 68
 $COL1 = 45  # label column width
 $COL2 = 6   # count column width
 
+# Pre-build format strings using double-quoted interpolation so $COL1/$COL2
+# are resolved before the -f operator ever sees the string — avoids the
+# PowerShell precedence issue where -f binds tighter than +.
+$fmtRow  = "  {0,-$COL1} {1,$COL2}  {2}"   # label | count | pct
+$fmtRow2 = "  {0,-$COL1} {1,$COL2}"         # label | count (no pct)
+$fmtSub  = "    {0,-$($COL1 - 2)} {1,$COL2}" # indented sub-row
+
 # ─── Print summary table ──────────────────────────────────────────────────────
 Write-Host ""
 Write-Host $SEP -ForegroundColor DarkGray
-Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}  {2}' -f 'Customization', 'Repos', "% of $nScanned scanned") -ForegroundColor White
+Write-Host ($fmtRow -f 'Customization', 'Repos', "% of $nScanned scanned") -ForegroundColor White
 Write-Host $SEP -ForegroundColor DarkGray
 
 foreach ($key in $customizationDefs.Keys) {
@@ -180,7 +188,7 @@ foreach ($key in $customizationDefs.Keys) {
     $pctVal = if ($nScanned -gt 0) { $count / $nScanned * 100 } else { 0 }
     $color  = if ($pctVal -ge 50) { 'Green' } elseif ($pctVal -ge 10) { 'Yellow' } else { 'DarkYellow' }
 
-    Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}  {2}' -f $label, $count, $pctStr) -ForegroundColor $color
+    Write-Host ($fmtRow -f $label, $count, $pctStr) -ForegroundColor $color
 }
 
 Write-Host $SEP -ForegroundColor DarkGray
@@ -192,16 +200,12 @@ $nAny = @($scanned | Where-Object {
 }).Count
 $nNone = $nScanned - $nAny
 
-Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}  {2}' -f `
-    'Repos WITH any customization', $nAny, (Format-PctStr $nAny $nScanned)) -ForegroundColor Cyan
-
-Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}  {2}' -f `
-    'Repos WITHOUT any customization', $nNone, (Format-PctStr $nNone $nScanned)) -ForegroundColor Magenta
+Write-Host ($fmtRow -f 'Repos WITH any customization',    $nAny,  (Format-PctStr $nAny  $nScanned)) -ForegroundColor Cyan
+Write-Host ($fmtRow -f 'Repos WITHOUT any customization', $nNone, (Format-PctStr $nNone $nScanned)) -ForegroundColor Magenta
 
 if ($nErrors -gt 0) {
     Write-Host ""
-    Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}  {2}' -f `
-        'Repos with scan errors (excluded above)', $nErrors, (Format-PctStr $nErrors $total)) -ForegroundColor Red
+    Write-Host ($fmtRow -f 'Repos with scan errors (excluded above)', $nErrors, (Format-PctStr $nErrors $total)) -ForegroundColor Red
 
     # Break down error types
     $byStatus = $errorRepos | Group-Object Status
@@ -212,11 +216,22 @@ if ($nErrors -gt 0) {
             'scan_failed'  { 'scan failed (unexpected error)' }
             default        { $g.Name }
         }
-        Write-Host ('    {0,-' + ($COL1 - 2) + '} {1,' + $COL2 + '}' -f "  └ $statusLabel", $g.Count) -ForegroundColor DarkRed
+        Write-Host ($fmtSub -f "  └ $statusLabel", $g.Count) -ForegroundColor DarkRed
     }
 }
 
 Write-Host $SEP -ForegroundColor DarkGray
-Write-Host ('  {0,-' + $COL1 + '} {1,' + $COL2 + '}' -f 'Total repositories in scope', $total) -ForegroundColor White
+Write-Host ($fmtRow2 -f 'Total repositories in scope', $total) -ForegroundColor White
 Write-Host $SEP -ForegroundColor DarkGray
+
+# ─── Duration ─────────────────────────────────────────────────────────────────
+$duration = New-TimeSpan -Start $startTime -End (Get-Date)
+$durationStr = if ($duration.TotalHours -ge 1) {
+    '{0}h {1}m {2}s' -f [int]$duration.TotalHours, $duration.Minutes, $duration.Seconds
+} elseif ($duration.TotalMinutes -ge 1) {
+    '{0}m {1}s' -f $duration.Minutes, $duration.Seconds
+} else {
+    '{0}s' -f $duration.Seconds
+}
+Write-Host "  Completed in $durationStr" -ForegroundColor DarkGray
 Write-Host ""
